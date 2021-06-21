@@ -130,6 +130,10 @@ def main():
     config = json.load(open(args.config, 'r'))
 
     telegram_bot_token = config['telegram_bot_token']
+    if not telegram_bot_token:
+        raise RuntimeError(f"telegram_bot_token is required (missing from {args.config}). "
+                           f"See how to create a bot: https://core.telegram.org/bots#creating-a-new-bot")
+
     telegram_chat_id = config.get('telegram_chat_id')
     if not telegram_chat_id:
         telegram_chat_id = telegram_chat_id_helper(telegram_bot_token)
