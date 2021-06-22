@@ -3,7 +3,9 @@ import argparse
 import os
 import time
 import json
+import string
 import logging
+import secrets
 import datetime
 import platform
 
@@ -27,7 +29,7 @@ def take_screenshot(driver, path='debug'):
 
 
 class RAPoller:
-    def __init__(self, urls, alert_bot, polling_interval_seconds=5, polling_max_faults=50,
+    def __init__(self, urls, alert_bot, polling_interval_seconds=5, polling_max_faults=500,
                  alerting_interval_seconds=10, alerting_max_repeats=30):
         self.urls = urls
         self.alert_bot = alert_bot
@@ -103,9 +105,11 @@ class RAPoller:
                     
                     
 def telegram_chat_id_helper(bot_token, sleep_interval=5):
+    """ Helper to assist finding your telegram chat id for notifications. """
     bot = telegram.Bot(bot_token)
-    logger.info(f'To continue, send the command /start to {bot.name} from the Telegram app.')
-    logger.info('Waiting...')
+    safety_code = ''.join([secrets.choice(string.digits) for _ in range(4)])
+    logger.info(f'To subscribe to alerts, message "{safety_code}" to '
+                f'{bot.name} from your Telegram app now...')
     visited_update_ids = {u.update_id for u in bot.get_updates()}
     while True:
         updates = bot.get_updates()
@@ -114,9 +118,9 @@ def telegram_chat_id_helper(bot_token, sleep_interval=5):
             if latest_update.update_id not in visited_update_ids:
                 visited_update_ids.add(latest_update.update_id)
                 text = latest_update.message.text
-                if text and 'start' in text.lower():
+                if safety_code in text.strip():
                     chat_id = latest_update.message.from_user.id
-                    logger.info(f'Detected chat_id {chat_id} for telegram user '
+                    logger.info(f'Found chat_id {chat_id} for telegram user '
                                 f'{latest_update.message.from_user.username}')
                     return chat_id
         time.sleep(sleep_interval)
@@ -129,7 +133,7 @@ def main():
 
     config = json.load(open(args.config, 'r'))
 
-    telegram_bot_token = config['telegram_bot_token']
+    telegram_bot_token = config.get('telegram_bot_token')
     if not telegram_bot_token:
         raise RuntimeError(f"telegram_bot_token is required (missing from {args.config}). "
                            f"See how to create a bot: https://core.telegram.org/bots#creating-a-new-bot")
@@ -141,7 +145,7 @@ def main():
         json.dump(config, open(args.config, 'w'), indent=2)
         logger.info(f'Committed telegram_chat_id={telegram_chat_id} to {args.config}')
 
-    alert_bot = TelegramClient(config['telegram_bot_token'], telegram_chat_id, app_name='RA poller')
+    alert_bot = TelegramClient(telegram_bot_token, telegram_chat_id, app_name='RA poller')
     alert_bot.pop_newest()  # Clear the queue to prevent stale updates from being parsed.
 
     poller = RAPoller(config['ticket_urls'], alert_bot)
